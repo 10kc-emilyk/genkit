@@ -15,11 +15,13 @@
  */
 
 import * as assert from 'assert';
-import { Genkit, Operation } from 'genkit';
+import { Operation } from 'genkit';
 import { GenerateRequest } from 'genkit/model';
+import { backgroundModel } from 'genkit/plugin';
 import { GoogleAuth } from 'google-auth-library';
 import { afterEach, beforeEach, describe, it } from 'node:test';
 import * as sinon from 'sinon';
+
 import { getGenkitClientHeader } from '../../src/common/utils.js';
 import { getVertexAIUrl } from '../../src/vertexai/client.js';
 import {
@@ -44,9 +46,9 @@ import {
 const { GENERIC_MODEL, KNOWN_MODELS } = TEST_ONLY;
 
 describe('Vertex AI Veo', () => {
-  let mockGenkit: sinon.SinonStubbedInstance<Genkit>;
   let fetchStub: sinon.SinonStub;
   let authMock: sinon.SinonStubbedInstance<GoogleAuth>;
+  let backgroundModelStub: sinon.SinonStub;
 
   const modelName = 'veo-test-model';
 
@@ -58,18 +60,14 @@ describe('Vertex AI Veo', () => {
   };
 
   beforeEach(() => {
-    mockGenkit = sinon.createStubInstance(Genkit);
+    // Avoid double-stubbing by restoring first if already stubbed
+    sinon.restore();
     fetchStub = sinon.stub(global, 'fetch');
     authMock = sinon.createStubInstance(GoogleAuth);
+    backgroundModelStub = sinon.stub(backgroundModel as any);
 
     authMock.getAccessToken.resolves('test-token');
     defaultRegionalClientOptions.authClient = authMock as unknown as GoogleAuth;
-
-    // Mock Genkit registry methods if needed, though defineBackgroundModel is the key
-    (mockGenkit as any).registry = {
-      lookupAction: () => undefined,
-      generateTraceId: () => 'test-trace-id',
-    };
   });
 
   afterEach(() => {
@@ -99,11 +97,14 @@ describe('Vertex AI Veo', () => {
     it('should return a ModelReference for a known model', () => {
       const knownModelName = Object.keys(KNOWN_MODELS)[0];
       const ref = createModelRef(knownModelName);
-      const supports: any = { ...ref.info?.supports };
+      const info: unknown = ref.info;
 
       assert.strictEqual(ref.name, `vertexai/${knownModelName}`);
-      assert.ok(supports?.media);
-      assert.ok(supports?.longRunning);
+      assert.ok((info as { supports?: { media?: boolean } })?.supports?.media);
+      assert.ok(
+        (info as { supports?: { longRunning?: boolean } })?.supports
+          ?.longRunning
+      );
     });
 
     it('should return a ModelReference for an unknown model using generic info', () => {
@@ -122,8 +123,8 @@ describe('Vertex AI Veo', () => {
       check: (operation: Operation) => Promise<Operation>;
     } {
       defineModel(modelName, clientOptions);
-      sinon.assert.calledOnce(mockGenkit.defineBackgroundModel);
-      const callArgs = mockGenkit.defineBackgroundModel.firstCall.args;
+      sinon.assert.calledOnce(backgroundModelStub);
+      const callArgs = backgroundModelStub.firstCall.args;
       assert.strictEqual(callArgs[0].name, `vertexai/${modelName}`);
       assert.strictEqual(callArgs[0].configSchema, VeoConfigSchema);
       return {

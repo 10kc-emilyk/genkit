@@ -15,10 +15,12 @@
  */
 
 import * as assert from 'assert';
-import { Genkit, Operation } from 'genkit';
+import { Operation } from 'genkit';
 import { GenerateRequest, GenerateResponseData } from 'genkit/model';
+import { backgroundModel } from 'genkit/plugin';
 import { afterEach, beforeEach, describe, it } from 'node:test';
 import * as sinon from 'sinon';
+
 import { getGenkitClientHeader } from '../../src/common/utils.js';
 import { getGoogleAIUrl } from '../../src/googleai/client.js';
 import { VeoOperation, VeoPredictRequest } from '../../src/googleai/types.js';
@@ -177,17 +179,17 @@ describe('Google AI Veo', () => {
   });
 
   describe('defineModel()', () => {
-    let mockAi: sinon.SinonStubbedInstance<Genkit>;
     let fetchStub: sinon.SinonStub;
     let envStub: sinon.SinonStub;
+    let backgroundModelStub: sinon.SinonStub;
 
     const modelName = 'veo-test-model';
     const defaultApiKey = 'default-api-key';
 
     beforeEach(() => {
-      mockAi = sinon.createStubInstance(Genkit);
       fetchStub = sinon.stub(global, 'fetch');
       envStub = sinon.stub(process, 'env').value({});
+      backgroundModelStub = sinon.stub(backgroundModel as any);
     });
 
     afterEach(() => {
@@ -223,10 +225,10 @@ describe('Google AI Veo', () => {
 
       defineModel(name, { apiKey, apiVersion, baseUrl });
       assert.ok(
-        mockAi.defineBackgroundModel.calledOnce,
-        'defineBackgroundModel should be called'
+        backgroundModelStub.calledOnce,
+        'backgroundModel should be called'
       );
-      const callArgs = mockAi.defineBackgroundModel.firstCall.args;
+      const callArgs = backgroundModelStub.firstCall.args;
       assert.strictEqual(callArgs[0].name, `googleai/${name}`);
       assert.strictEqual(callArgs[0].configSchema, VeoConfigSchema);
       return { start: callArgs[0].start, check: callArgs[0].check };
